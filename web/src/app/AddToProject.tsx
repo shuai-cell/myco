@@ -91,6 +91,7 @@ const NEW_CLIS: { value: SpawnCli; label: string }[] = [
   { value: "kiro", label: "Kiro" },
   { value: "pi", label: "Pi" },
   { value: "qoder", label: "Qoder CLI" },
+  { value: "dsh", label: "DeepSeek Harness (DSH)" },
   { value: "qwen", label: "Qwen Code" },
   { value: "kimi", label: "Kimi Code" },
   { value: "goose", label: "goose" },

@@ -334,6 +334,7 @@ func (e *env) buildRunner(cfgPath string, cfg *config.Config, sh runnerShared, o
 		OnRunSettings:         rep.RunSettings,
 		ApplyProviderSettings: remoteProviderApplier(cfgPath, c),
 		OnQuota:               rep.Quota,
+		OnModels:              rep.SessionModels,
 		OnStop:                rep.Goodbye,
 		Access:                access,
 		MaxAccess:             maxAccess,

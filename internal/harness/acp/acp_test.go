@@ -39,6 +39,12 @@ func fakeAgent(scenario string) {
 	update := func(sid string, u map[string]any) {
 		send(map[string]any{"method": "session/update", "params": map[string]any{"sessionId": sid, "update": u}})
 	}
+	modelOptions := func(current string) []any {
+		return []any{map[string]any{"id": "model", "type": "select", "currentValue": current, "options": []any{
+			map[string]any{"value": "route alpha", "name": "Alpha"},
+			map[string]any{"value": "route beta", "name": "Beta"},
+		}}}
+	}
 	chunk := func(sid, kind, text string) {
 		update(sid, map[string]any{"sessionUpdate": kind, "content": map[string]string{"type": "text", "text": text}})
 	}
@@ -85,7 +91,11 @@ func fakeAgent(scenario string) {
 				continue
 			}
 			note("cwd %v", params["cwd"])
-			send(map[string]any{"id": id, "result": map[string]any{"sessionId": "S-new"}})
+			result := map[string]any{"sessionId": "S-new"}
+			if scenario == "models" {
+				result["configOptions"] = modelOptions("route alpha")
+			}
+			send(map[string]any{"id": id, "result": result})
 		case "session/load":
 			sid := params["sessionId"].(string)
 			if sid == "gone" {
@@ -95,7 +105,11 @@ func fakeAgent(scenario string) {
 			// History is replayed before the answer: not part of this run.
 			chunk(sid, "user_message_chunk", "old question")
 			chunk(sid, "agent_message_chunk", "old answer")
-			send(map[string]any{"id": id, "result": map[string]any{}})
+			result := map[string]any{}
+			if scenario == "models" {
+				result["configOptions"] = modelOptions("route alpha")
+			}
+			send(map[string]any{"id": id, "result": result})
 		case "session/prompt":
 			sid := params["sessionId"].(string)
 			prompt := params["prompt"].([]any)[0].(map[string]any)["text"]
@@ -149,7 +163,11 @@ func fakeAgent(scenario string) {
 				send(map[string]any{"id": id, "error": map[string]any{"code": -32602, "message": "unknown model nope"}})
 				continue
 			}
-			send(map[string]any{"id": id, "result": map[string]any{"configOptions": []any{}}})
+			options := []any{}
+			if scenario == "models" {
+				options = modelOptions(params["value"].(string))
+			}
+			send(map[string]any{"id": id, "result": map[string]any{"configOptions": options}})
 		case "session/cancel":
 		default:
 			if id != nil {
@@ -167,6 +185,10 @@ type fake struct {
 }
 
 func newFake(t *testing.T, scenario string, opts harness.Options, spec Spec) *fake {
+	return newFakeNamed(t, "fake", scenario, opts, spec)
+}
+
+func newFakeNamed(t *testing.T, name, scenario string, opts harness.Options, spec Spec) *fake {
 	t.Helper()
 	exe, err := os.Executable()
 	if err != nil {
@@ -176,7 +198,7 @@ func newFake(t *testing.T, scenario string, opts harness.Options, spec Spec) *fa
 	t.Setenv("MYCO_FAKE_ACP", scenario)
 	t.Setenv("MYCO_FAKE_LOG", f.log)
 	spec.Binary = exe
-	h, err := Preset("fake", spec)(opts)
+	h, err := Preset(name, spec)(opts)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,6 +300,62 @@ func TestRunSubcommandModelConfigAndAccessEnv(t *testing.T) {
 	f = newFake(t, "ok", harness.Options{Model: "nope"}, spec)
 	if _, err := f.run(context.Background(), harness.Request{Prompt: "p"}); err == nil || !strings.Contains(err.Error(), "unknown model nope") {
 		t.Fatalf("a model the agent does not know: %v", err)
+	}
+}
+
+func TestDSHModelsAreReportedAndSelectedByStableID(t *testing.T) {
+	fixture := newFakeNamed(t, "dsh", "models", harness.Options{}, Spec{ModelConfig: "model"})
+	result, err := fixture.run(t.Context(), harness.Request{Prompt: "first"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.SessionID != "S-new" {
+		t.Fatalf("session = %q", result.SessionID)
+	}
+	fixture.mu.Lock()
+	var catalog *harness.ModelCatalog
+	for _, event := range fixture.events {
+		if event.ModelCatalog != nil {
+			catalog = event.ModelCatalog
+		}
+	}
+	fixture.mu.Unlock()
+	if catalog == nil || catalog.Current == "" || len(catalog.Choices) != 2 {
+		t.Fatalf("model catalog = %+v", catalog)
+	}
+	var selected harness.ModelChoice
+	for _, choice := range catalog.Choices {
+		if choice.ID != catalog.Current {
+			selected = choice
+			break
+		}
+	}
+	if selected.ID == "" {
+		t.Fatal("no alternate model offered")
+	}
+	_, err = fixture.run(t.Context(), harness.Request{Prompt: "second", SessionID: result.SessionID, Model: selected.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(fixture.seen(t), "config model=route beta") {
+		t.Fatalf("selected ID was not mapped to its model value:\n%s", fixture.seen(t))
+	}
+}
+
+func TestRunReadonlyOverridePinsEnvironmentAndDeniesEdits(t *testing.T) {
+	work := t.TempDir()
+	t.Setenv("MYCO_FAKE_EDIT", filepath.Join(work, "example"))
+	fixture := newFake(t, "ok", harness.Options{Access: harness.AccessFull}, Spec{
+		AccessEnv: map[harness.Access][]string{harness.AccessReadonly: {"FAKE_ACCESS=restricted"}},
+	})
+	_, err := fixture.run(t.Context(), harness.Request{Prompt: "test", Workdir: work,
+		Access: harness.AccessReadonly, Env: []string{"FAKE_ACCESS=unrestricted"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := fixture.seen(t)
+	if !strings.Contains(seen, "access-env restricted") || !strings.Contains(seen, `edit {"outcome":{"optionId":"cancel"`) {
+		t.Fatalf("readonly override not respected:\n%s", seen)
 	}
 }
 

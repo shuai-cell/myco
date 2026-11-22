@@ -136,3 +136,34 @@ func TestRuntimeProviderReportsOnlyHost(t *testing.T) {
 		t.Fatal("no runtime sent")
 	}
 }
+
+func TestSessionModelsUpdateRuntime(t *testing.T) {
+	reports := make(chan api.Runtime, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPut && r.URL.Path == "/v1/me/runtime" {
+			var rt api.Runtime
+			if err := json.NewDecoder(r.Body).Decode(&rt); err != nil {
+				t.Error(err)
+			} else {
+				reports <- rt
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer srv.Close()
+	c, err := client.New(srv.URL, "tok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rep := &runtimeReporter{c: c, log: slog.New(slog.NewTextHandler(io.Discard, nil)), base: &api.Runtime{CLI: "dsh"}}
+	rep.SessionModels(harness.ModelCatalog{Current: "dsh:current", Choices: []harness.ModelChoice{{ID: "dsh:current", Name: "Current"}}})
+	select {
+	case rt := <-reports:
+		if rt.Model != "dsh:current" || rt.ModelSource != "observed" || len(rt.Models) != 1 || rt.Models[0].Name != "Current" {
+			t.Fatalf("runtime = %+v", rt)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("no runtime report")
+	}
+}

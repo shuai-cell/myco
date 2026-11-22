@@ -133,7 +133,8 @@ func (a *agent) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	// over the protocol first, so the agent can save its session.
 	procCtx, kill := context.WithCancel(context.WithoutCancel(ctx))
 	defer kill()
-	env := append(append([]string{}, a.spec.AccessEnv[req.AccessOr(a.opts.Access)]...), req.Env...)
+	access := req.AccessOr(a.opts.Access)
+	env := append(append([]string{}, req.Env...), a.spec.AccessEnv[access]...)
 	cmd := harness.Command(procCtx, harness.Process{Binary: a.spec.Binary, Args: a.args(req), Workdir: req.Workdir, Env: env})
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -167,7 +168,7 @@ func (a *agent) Run(ctx context.Context, req harness.Request) (harness.Result, e
 
 	st := newStream(req.OnEvent, cwd)
 	var refused []string // read after the turn (the reader is done by then)
-	pol := policy{access: a.opts.Access, dirs: append([]string{cwd}, req.ExtraDirs...), refused: &refused}
+	pol := policy{access: access, dirs: append([]string{cwd}, req.ExtraDirs...), refused: &refused}
 	c.onNotify = func(method string, params json.RawMessage) {
 		if method != "session/update" {
 			return
@@ -227,13 +228,14 @@ func (a *agent) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	}
 
 	// The session: continue it if the agent can, else a new one.
+	var config sessionConfig
 	if req.SessionID != "" {
 		params := map[string]any{"sessionId": req.SessionID, "cwd": cwd, "mcpServers": []any{}}
 		switch caps := init.AgentCapabilities; {
 		case caps.LoadSession:
-			err = c.call(startCtx, "session/load", params, nil)
+			err = c.call(startCtx, "session/load", params, &config)
 		case len(caps.SessionCapabilities.Resume) > 0 && string(caps.SessionCapabilities.Resume) != "null":
-			err = c.call(startCtx, "session/resume", params, nil)
+			err = c.call(startCtx, "session/resume", params, &config)
 		default:
 			err = errors.New("the agent cannot continue sessions")
 		}
@@ -246,21 +248,44 @@ func (a *agent) Run(ctx context.Context, req harness.Request) (harness.Result, e
 		// Otherwise (session gone, not supported): a new session.
 	}
 	if sessionID == "" {
-		var ns struct {
-			SessionID string `json:"sessionId"`
-		}
-		if err := c.call(startCtx, "session/new", map[string]any{"cwd": cwd, "mcpServers": []any{}}, &ns); err != nil {
+		config = sessionConfig{}
+		if err := c.call(startCtx, "session/new", map[string]any{"cwd": cwd, "mcpServers": []any{}}, &config); err != nil {
 			return fail(err)
 		}
-		if ns.SessionID == "" {
+		if config.SessionID == "" {
 			return fail(errors.New("the agent started no session"))
 		}
-		sessionID = ns.SessionID
+		sessionID = config.SessionID
 	}
-	if a.opts.Model != "" && a.spec.ModelConfig != "" {
-		err := c.call(startCtx, "session/set_config_option", map[string]any{"sessionId": sessionID, "configId": a.spec.ModelConfig, "value": a.opts.Model}, nil)
+	model := a.opts.Model
+	reportModels := func(state sessionConfig) map[string]string {
+		catalog, values := state.models()
+		if catalog != nil && req.OnEvent != nil {
+			req.OnEvent(harness.Event{Kind: "models", ModelCatalog: catalog})
+		}
+		return values
+	}
+	if a.name == "dsh" {
+		values := reportModels(config)
+		if req.Model != "" {
+			model = req.Model
+		}
+		if strings.HasPrefix(model, "dsh:") {
+			value, ok := values[model]
+			if !ok {
+				return fail(errors.New("selected DSH model is no longer available; choose another model"))
+			}
+			model = value
+		}
+	}
+	if model != "" && a.spec.ModelConfig != "" {
+		var applied sessionConfig
+		err := c.call(startCtx, "session/set_config_option", map[string]any{"sessionId": sessionID, "configId": a.spec.ModelConfig, "value": model}, &applied)
 		if err != nil {
-			return fail(fmt.Errorf("model %s: %w", a.opts.Model, err))
+			return fail(fmt.Errorf("model %s: %w", model, err))
+		}
+		if a.name == "dsh" {
+			reportModels(applied)
 		}
 	}
 	cancelStart()
@@ -303,7 +328,7 @@ func (a *agent) Run(ctx context.Context, req harness.Request) (harness.Result, e
 	if res.Output == "" && len(refused) > 0 {
 		// Some agents end the turn when a call is refused: say why.
 		res.Output = fmt.Sprintf("Stopped: myco refused %s. This node's access (%s) does not allow it; give the node more access to let it run.",
-			strings.Join(refused, ", "), accessName(a.opts.Access))
+			strings.Join(refused, ", "), accessName(access))
 	}
 	switch ans.resp.StopReason {
 	case "refusal":

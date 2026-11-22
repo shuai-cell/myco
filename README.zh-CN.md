@@ -251,6 +251,7 @@ flowchart TB
 | [Cursor CLI](https://docs.cursor.com/cli) | `cursor-agent acp` | `cursor` | ACP：实验性 |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini --acp` | `gemini` | ACP：实验性 |
 | [OpenCode](https://opencode.ai) | `opencode acp` | `opencode` | ACP：实验性 |
+| [DeepSeek Harness](https://harness.deepseek.com) | `dsh --profile acp` | `dsh` | ACP：实验性 |
 | [Qoder CLI](https://qoder.com) | `qodercli --acp` | `qoder` | ACP：实验性 |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen --acp` | `qwen` | ACP：实验性 |
 | [Kimi Code](https://moonshotai.github.io/kimi-cli/) | `kimi acp` | `kimi` | ACP：实验性 |

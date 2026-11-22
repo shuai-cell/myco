@@ -2,6 +2,7 @@
 package builtin
 
 import (
+	"github.com/chenhg5/myco/internal/dshcli"
 	"github.com/chenhg5/myco/internal/harness"
 	"github.com/chenhg5/myco/internal/harness/acp"
 	"github.com/chenhg5/myco/internal/harness/claude"
@@ -39,10 +40,21 @@ func acpOrTemplate(name string, spec acp.Spec) harness.Factory {
 		if opts.Template != nil {
 			return viaTemplate(opts)
 		}
+		if name == "dsh" && opts.Binary == "" {
+			if binary, entry := dshcli.Lookup(); binary != "" {
+				resolved := spec
+				resolved.Binary = binary
+				if entry != "" {
+					resolved.Args = append([]string{entry}, spec.Args...)
+					resolved.VersionArgs = []string{entry, "--version"}
+				}
+				return acp.Preset(name, resolved)(opts)
+			}
+		}
 		return viaACP(opts)
 	}
 }
 
 // Experimental lists presets whose CLI formats have not been verified.
-var Experimental = map[string]bool{"cursor": true, "gemini": true, "opencode": true,
+var Experimental = map[string]bool{"cursor": true, "gemini": true, "opencode": true, "dsh": true,
 	"qoder": true, "qwen": true, "kimi": true, "goose": true, "copilot": true, "auggie": true, "codebuddy": true, "kilo": true, "cline": true, "grok": true}

@@ -16,6 +16,7 @@ import (
 	"github.com/chenhg5/myco/internal/config"
 	"github.com/chenhg5/myco/internal/console"
 	"github.com/chenhg5/myco/internal/domain"
+	"github.com/chenhg5/myco/internal/dshcli"
 	"github.com/chenhg5/myco/internal/harness"
 	"github.com/chenhg5/myco/internal/harness/builtin"
 	"github.com/chenhg5/myco/internal/harness/execnode"
@@ -26,6 +27,10 @@ import (
 
 // spawnBinary is the executable each spawnable CLI needs on PATH.
 func spawnBinary(cli string) string {
+	if cli == "dsh" {
+		binary, _ := dshcli.Lookup()
+		return binary
+	}
 	if b := builtin.Binary(cli); b != "" {
 		return b
 	}

@@ -95,8 +95,16 @@ type Event struct {
 	DurationMS   int64   `json:"duration_ms,omitempty"`
 	// Quota (kind quota): the account's usage limits as the CLI reports
 	// them. Not a step of the run: the runner reports it with the runtime.
-	Quota *Quota `json:"-"`
+	Quota        *Quota        `json:"-"`
+	ModelCatalog *ModelCatalog `json:"-"`
 }
+
+type ModelCatalog struct {
+	Current string
+	Choices []ModelChoice
+}
+
+type ModelChoice struct{ ID, Name string }
 
 // Quota is a CLI account's usage limits.
 type Quota struct {

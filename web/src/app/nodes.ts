@@ -22,6 +22,7 @@ const CLI_META: Record<string, { label: string; icon: IconType }> = {
   gemini: { label: "Gemini CLI", icon: IconStar },
   opencode: { label: "OpenCode", icon: IconTerminal },
   qoder: { label: "Qoder CLI", icon: IconBot },
+  dsh: { label: "DeepSeek Harness (DSH)", icon: IconBot },
   qwen: { label: "Qwen Code", icon: IconBot },
   kimi: { label: "Kimi Code", icon: IconBot },
   goose: { label: "goose", icon: IconBot },

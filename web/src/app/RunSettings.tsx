@@ -134,7 +134,7 @@ export function RunRows({ row, now, mayManage, onRefresh, part = "all" }: {
   const ag = row.st.agent;
   const rt = ag.runtime;
   const cli = rt?.cli || ag.binding.harness || "";
-  const tunable = agentKind(ag) === "agent" && !isCloud(ag) && (cli === "claude" || cli === "codex");
+  const tunable = agentKind(ag) === "agent" && !isCloud(ag) && (cli === "claude" || cli === "codex" || (cli === "dsh" && !!rt?.models?.length));
   // Set when the hub answered 404/405: it has no run settings, so the block
   // stays read-only (older hubs, or one released without the feature).
   const [old, setOld] = useState(false);
@@ -298,21 +298,21 @@ export function RunRows({ row, now, mayManage, onRefresh, part = "all" }: {
                 aria-label={L("模型", "Model")}
                 onChange={(e) => pickModel(e.target.value)}
               >
-                <option value="">{L("跟随电脑设置", "Follow this computer")}</option>
-                {models.map((m) => <option key={m} value={m}>{modelName(m, rt) === m ? m : `${modelName(m, rt)} (${m})`}</option>)}
-                <option value="__custom__">{L("自定义…", "Custom…")}</option>
+                <option value="">{cli === "dsh" ? L("沿用 DSH 会话模型", "Use the DSH session model") : L("跟随电脑设置", "Follow this computer")}</option>
+                {models.map((m) => <option key={m} value={m}>{cli === "dsh" || modelName(m, rt) === m ? modelName(m, rt) : `${modelName(m, rt)} (${m})`}</option>)}
+                {cli !== "dsh" && <option value="__custom__">{L("自定义…", "Custom…")}</option>}
               </select>
             )
-          ) : <SourceValue value={rt?.model} source={rt?.model_source} />}
+          ) : cli === "dsh" && !rt?.models?.length ? L("发一条消息后，会显示 DSH 会话提供的模型。", "Send a message to discover this DSH session’s models.") : <SourceValue value={cli === "dsh" ? modelName(rt?.model, rt) : rt?.model} source={rt?.model_source} />}
         </span>
         {editable && (
           <span className="app-kv-help">
-            {L("现在用的：", "In use: ")}<SourceValue value={rt?.model} source={rt?.model_source} />
+            {L("现在用的：", "In use: ")}<SourceValue value={cli === "dsh" ? modelName(rt?.model, rt) : rt?.model} source={rt?.model_source} />
           </span>
         )}
       </div>
 
-      {tunable && (
+      {tunable && cli !== "dsh" && (
         <div className={cn("app-kv", editable && "has-help")}>
           <span className="app-kv-label">{L("推理强度", "Effort")}</span>
           <span className="app-kv-value">
@@ -388,7 +388,7 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const [old, setOld] = useState(false);
-  const runner = agentKind(ag) === "agent" && !isCloud(ag) && !isInbox(ag) && (cli === "claude" || cli === "codex");
+  const runner = agentKind(ag) === "agent" && !isCloud(ag) && !isInbox(ag) && (cli === "claude" || cli === "codex" || (cli === "dsh" && !!rt?.models?.length));
   const editable = runner && canManage(row.hub, ag.owner_id) && !old && hubAfter0194(row.hub.hub_version);
   const rs = useRunSettings(row);
   const setModel = rs?.model || "";
@@ -433,11 +433,11 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
                 {["", ...models].map((m) => (
                   <button key={`m:${m}`} type="button" role="menuitemradio" aria-checked={setModel === m} className={cn("run-pill-item", setModel === m && "is-on")}
                     disabled={busy} onClick={() => void save({ model: m, effort: setEffort })}>
-                    <span>{m ? modelName(m, rt) : L("跟随电脑设置", "Follow this computer")}</span>
-                    {m && m !== modelName(m, rt) && <span className="run-pill-sub">{m}</span>}
+                    <span>{m ? modelName(m, rt) : cli === "dsh" ? L("沿用 DSH 会话模型", "Use the DSH session model") : L("跟随电脑设置", "Follow this computer")}</span>
+                    {cli !== "dsh" && m && m !== modelName(m, rt) && <span className="run-pill-sub">{m}</span>}
                   </button>
                 ))}
-                <div className="run-pill-group">{L("推理强度", "Effort")}</div>
+                {cli !== "dsh" && <><div className="run-pill-group">{L("推理强度", "Effort")}</div>
                 <div className="run-pill-efforts">
                   {["", ...efforts].map((x) => (
                     <button key={`e:${x}`} type="button" role="menuitemradio" aria-checked={setEffort === x} className={cn("run-pill-chip", setEffort === x && "is-on")}
@@ -447,6 +447,7 @@ export function RunPill({ row, onRefresh }: { row: AgentRow; onRefresh: () => Pr
                     </button>
                   ))}
                 </div>
+                </>}
                 <p className="run-pill-note">
                   {L("现在是：", "In use: ")}{modelName(rt?.model, rt) || "—"}{rt?.effort ? ` · ${effortLabel(rt.effort)}` : ""}
                   {L("。切换后下次唤醒时生效。", ". A switch applies from its next run.")}

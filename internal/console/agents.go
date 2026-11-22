@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/chenhg5/myco/internal/client"
+	"github.com/chenhg5/myco/internal/dshcli"
 )
 
 // LocalAgent is an agent CLI on this computer: whether it is installed and
@@ -56,6 +57,7 @@ var agentCLIs = []agentCLI{
 	{cli: "opencode", name: "opencode", binary: "opencode",
 		install: "curl -fsSL https://opencode.ai/install | bash", npm: "npm install -g opencode-ai", login: "opencode auth login"},
 	{cli: "qoder", name: "Qoder CLI", binary: "qodercli", npm: "npm install -g @qoder-ai/qodercli", login: "qodercli"},
+	{cli: "dsh", name: "DeepSeek Harness (DSH)", binary: "dsh", npm: "npm install -g @deepseek-ai/dsh"},
 	{cli: "qwen", name: "Qwen Code", binary: "qwen", npm: "npm install -g @qwen-code/qwen-code", login: "qwen"},
 	{cli: "kimi", name: "Kimi Code", binary: "kimi", npm: "npm install -g @moonshot-ai/kimi-code", login: "kimi"},
 	{cli: "copilot", name: "GitHub Copilot", binary: "copilot", npm: "npm install -g @github/copilot", login: "copilot"},
@@ -116,6 +118,20 @@ func (l *Local) LocalAgents(ctx context.Context) []LocalAgent {
 func (l *Local) localAgent(ctx context.Context, a agentCLI) LocalAgent {
 	install, mirror, needs := a.commands()
 	la := LocalAgent{CLI: a.cli, Name: a.name, State: "missing", Install: install, InstallMirror: mirror, Login: a.loginHere(headless()), Needs: needs}
+	if a.cli == "dsh" {
+		binary, entry := dshcli.Lookup()
+		if binary == "" {
+			return la
+		}
+		la.Path, la.State = binary, "unknown"
+		if entry != "" {
+			la.Path = entry
+			la.Version = l.version(ctx, binary, entry)
+		} else {
+			la.Version = l.version(ctx, binary)
+		}
+		return la
+	}
 	la.Path = l.findAgent(a.binary)
 	if la.Path == "" {
 		return la
@@ -147,9 +163,13 @@ func headless() bool {
 // version is what the CLI at path says its version is, remembered while
 // the file stays the same (size and modification time): running --version
 // takes a second or more for some, and the list is asked for often.
-func (l *Local) version(ctx context.Context, path string) string {
+func (l *Local) version(ctx context.Context, path string, prefix ...string) string {
 	key := ""
-	if real, err := filepath.EvalSymlinks(path); err == nil {
+	source := path
+	if len(prefix) != 0 {
+		source = prefix[0]
+	}
+	if real, err := filepath.EvalSymlinks(source); err == nil {
 		if fi, err := os.Stat(real); err == nil {
 			key = fmt.Sprintf("%s|%d|%d", real, fi.Size(), fi.ModTime().UnixNano())
 		}
@@ -161,7 +181,7 @@ func (l *Local) version(ctx context.Context, path string) string {
 	}
 	vctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	out, err := l.runAgent(vctx, path, "--version")
+	out, err := l.runAgent(vctx, path, append(prefix, "--version")...)
 	if err != nil {
 		return ""
 	}

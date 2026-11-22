@@ -14,7 +14,7 @@ import (
 )
 
 // readmeHarnesses are the harnesses the README advertises.
-var readmeHarnesses = []string{"acp", "auggie", "claude", "cline", "codebuddy", "codex", "copilot", "cursor", "exec", "gemini", "goose", "grok", "kilo", "kimi", "kiro", "opencode", "pi", "qoder", "qwen", "shell", "template"}
+var readmeHarnesses = []string{"acp", "auggie", "claude", "cline", "codebuddy", "codex", "copilot", "cursor", "dsh", "exec", "gemini", "goose", "grok", "kilo", "kimi", "kiro", "opencode", "pi", "qoder", "qwen", "shell", "template"}
 
 func TestRegistryHasEveryAdvertisedHarness(t *testing.T) {
 	got := Registry().Names()
@@ -104,6 +104,21 @@ func TestPresetSpecsAreSane(t *testing.T) {
 	for _, name := range []string{"pi", "kiro"} {
 		if Experimental[name] {
 			t.Errorf("%s is verified, not experimental", name)
+		}
+	}
+}
+
+func TestDSHPreset(t *testing.T) {
+	spec := ACPPresets["dsh"]
+	if spec.Binary != "dsh" || !slices.Equal(spec.Args, []string{"--profile", "acp"}) {
+		t.Fatalf("unexpected DSH launch: %s %v", spec.Binary, spec.Args)
+	}
+	for access, mode := range map[harness.Access]string{
+		harness.AccessDefault: "read-only", harness.AccessReadonly: "read-only",
+		harness.AccessWorkspace: "workspace-write", harness.AccessFull: "danger-full-access",
+	} {
+		if !slices.Equal(spec.AccessEnv[access], []string{"DSH_PERMISSION_MODE=" + mode}) {
+			t.Fatalf("incorrect DSH sandbox for access %q", access)
 		}
 	}
 }

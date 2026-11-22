@@ -251,6 +251,7 @@ Every agent below keeps **its own session**: each message resumes the same conve
 | [Cursor CLI](https://docs.cursor.com/cli) | `cursor-agent acp` | `cursor` | ACP: experimental |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | `gemini --acp` | `gemini` | ACP: experimental |
 | [OpenCode](https://opencode.ai) | `opencode acp` | `opencode` | ACP: experimental |
+| [DeepSeek Harness](https://harness.deepseek.com) | `dsh --profile acp` | `dsh` | ACP: experimental |
 | [Qoder CLI](https://qoder.com) | `qodercli --acp` | `qoder` | ACP: experimental |
 | [Qwen Code](https://github.com/QwenLM/qwen-code) | `qwen --acp` | `qwen` | ACP: experimental |
 | [Kimi Code](https://moonshotai.github.io/kimi-cli/) | `kimi acp` | `kimi` | ACP: experimental |

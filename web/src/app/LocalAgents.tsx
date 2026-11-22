@@ -20,6 +20,7 @@ function iconOf(cli: string) {
 }
 
 function stateText(a: LocalAgent): string {
+  if (a.cli === "dsh" && a.state === "unknown") return L("已安装。请在 DeepSeek Harness 中配置模型。", "Installed. Configure your model in DeepSeek Harness.");
   switch (a.state) {
     case "ready": return a.version ? L(`可以用了 · ${a.version}`, `Ready · ${a.version}`) : L("可以用了", "Ready");
     case "signed_out": return L("装好了，还没登录", "Installed, not signed in");
@@ -139,7 +140,7 @@ export function LocalAgentLines({ only, onReady, hideReady }: { only?: string[];
                 {L("安装", "Install")}{a.install_mirror && <ChevronDown className="h-3.5 w-3.5" />}
               </button>
             )}
-            {(a.state === "signed_out" || a.state === "unknown") && (
+            {a.login && (a.state === "signed_out" || a.state === "unknown") && (
               <button type="button" className="app-btn app-btn-quiet" disabled={busy === a.cli} onClick={() => void open(a.cli, "login")}>{L("登录", "Sign in")}</button>
             )}
           </div>

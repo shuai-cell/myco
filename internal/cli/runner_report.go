@@ -44,7 +44,30 @@ type runtimeReporter struct {
 	sending   bool
 	// models lists the models the CLI offers, read again for each report
 	// (its list changes as the CLI updates); nil when it does not say.
-	models func() []api.RuntimeModel
+	models        func() []api.RuntimeModel
+	sessionModels []api.RuntimeModel
+	observedModel string
+	modelRevision uint64
+}
+
+func (r *runtimeReporter) SessionModels(catalog harness.ModelCatalog) {
+	if r == nil {
+		return
+	}
+	var models []api.RuntimeModel
+	for _, choice := range catalog.Choices {
+		models = append(models, api.RuntimeModel{ID: choice.ID, Name: choice.Name})
+	}
+	r.mu.Lock()
+	changed := !reflect.DeepEqual(models, r.sessionModels) || r.observedModel != catalog.Current
+	if changed {
+		r.sessionModels, r.observedModel = models, catalog.Current
+		r.modelRevision++
+	}
+	r.mu.Unlock()
+	if changed {
+		r.flushLater()
+	}
 }
 
 // reportToHub reports this machine (once) and the agent's runtime, and
@@ -190,12 +213,17 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 		return
 	}
 	rt := *r.base
+	revision := r.modelRevision
 	if supportsRemoteProvider(rt.CLI) {
 		options := localProviderOptions(rt.CLI)
 		rt.Providers = &options
 	}
 	if r.models != nil {
 		rt.Models = r.models()
+	}
+	if revision != 0 {
+		rt.Models = r.sessionModels
+		rt.Model, rt.ModelSource = r.observedModel, "observed"
 	}
 	ch := r.choice
 	switch {
@@ -231,7 +259,7 @@ func (r *runtimeReporter) flush(ctx context.Context) {
 	if err == nil {
 		r.last = rt
 	}
-	again := err == nil && (r.choice.name != ch.name || r.choice.host != ch.host || r.choice.source != ch.source || r.choice.model != ch.model)
+	again := err == nil && (r.modelRevision != revision || r.choice.name != ch.name || r.choice.host != ch.host || r.choice.source != ch.source || r.choice.model != ch.model)
 	r.mu.Unlock()
 	if err != nil {
 		r.log.Debug("runtime report failed (older hub?)", "err", err)

@@ -55,7 +55,8 @@ type Options struct {
 	Access    harness.Access
 	MaxAccess harness.Access
 	// OnQuota hears the account's usage limits whenever a run reports them.
-	OnQuota func(harness.Quota)
+	OnQuota  func(harness.Quota)
+	OnModels func(harness.ModelCatalog)
 	// OnStop runs once when Run returns because its context ended (the
 	// runner was stopped), after the runs in progress finished: the runner
 	// says goodbye to the hub there, so the app can tell why it is offline.
@@ -590,6 +591,12 @@ func (r *Runner) Handle(ctx context.Context, m api.Message) {
 		req.MCPTools = run.MCPTools != nil && *run.MCPTools
 		req.OnEvent = func(ev harness.Event) {
 			lastActive.Store(time.Now().UnixNano())
+			if ev.ModelCatalog != nil {
+				if r.opts.OnModels != nil {
+					r.opts.OnModels(*ev.ModelCatalog)
+				}
+				return
+			}
 			if ev.Kind == "quota" { // not a step of the run: it goes with the runtime
 				if ev.Quota != nil && r.opts.OnQuota != nil {
 					r.opts.OnQuota(*ev.Quota)

@@ -39,6 +39,18 @@ var Presets = map[string]harness.TemplateSpec{
 // ACPPresets are CLIs driven over the Agent Client Protocol, which reports
 // every step of a run (the live view in the app).
 var ACPPresets = map[string]acp.Spec{
+	"dsh": {
+		Binary:      "dsh",
+		Args:        []string{"--profile", "acp"},
+		ModelConfig: "model",
+		AccessEnv: map[harness.Access][]string{
+			harness.AccessDefault:   {"DSH_PERMISSION_MODE=read-only"},
+			harness.AccessReadonly:  {"DSH_PERMISSION_MODE=read-only"},
+			harness.AccessWorkspace: {"DSH_PERMISSION_MODE=workspace-write"},
+			harness.AccessFull:      {"DSH_PERMISSION_MODE=danger-full-access"},
+		},
+		Login: "configure a model provider in DeepSeek Harness on this computer",
+	},
 	"gemini": {
 		Binary:    "gemini",
 		Args:      []string{"--acp"},
